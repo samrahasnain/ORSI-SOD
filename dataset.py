@@ -11,41 +11,43 @@ random.seed(10)
 
 
 class ImageDataTrain(data.Dataset):
-    def __init__(self, data_root, data_list,image_size):
-        self.sal_root = data_root
-        self.sal_source = data_list
+    def __init__(self, image_dir, label_dir, image_size, transform=None):
+        self.image_dir = image_dir
+        self.label_dir = label_dir
         self.image_size = image_size
+        self.transform = transform
 
-        with open(self.sal_source, 'r') as f:
-            self.sal_list = [x.strip() for x in f.readlines()]
+        # Get sorted list of filenames to match images and labels
+        self.image_list = sorted([f for f in os.listdir(image_dir) if f.lower().endswith(('.jpg', '.png'))])
+        self.label_list = sorted([f for f in os.listdir(label_dir) if f.lower().endswith(('.jpg', '.png'))])
 
-        self.sal_num = len(self.sal_list)
+        assert len(self.image_list) == len(self.label_list), "Mismatch between number of images and labels"
 
-    def __getitem__(self, item):
-        # sal data loading
-        im_name = self.sal_list[item % self.sal_num].split()[0]
-        de_name = self.sal_list[item % self.sal_num].split()[1]
-        gt_name = self.sal_list[item % self.sal_num].split()[2]
-        sal_image , im_size= load_image(os.path.join(self.sal_root, im_name), self.image_size)
-        sal_depth, im_size = load_image(os.path.join(self.sal_root, de_name), self.image_size)
-        sal_label,sal_edge = load_sal_label(os.path.join(self.sal_root, gt_name), self.image_size)
+    def __len__(self):
+        return len(self.image_list)
 
-        sal_image, sal_depth, sal_label = cv_random_crop(sal_image, sal_depth, sal_label, self.image_size)
+    def __getitem__(self, index):
+        # Construct full paths
+        image_path = os.path.join(self.image_dir, self.image_list[index])
+        label_path = os.path.join(self.label_dir, self.label_list[index])
+        sal_image , im_size= load_image(image_path, self.image_size)
+        
+        sal_label,sal_edge = load_sal_label(label_path, self.image_size)
+
+        sal_image, sal_image, sal_label = cv_random_crop(sal_image, sal_image, sal_label, self.image_size)
         sal_image = sal_image.transpose((2, 0, 1))
-        sal_depth = sal_depth.transpose((2, 0, 1))
+        
         sal_label = sal_label.transpose((2, 0, 1))
         sal_edge = sal_edge.transpose((2, 0, 1))
 
         sal_image = torch.Tensor(sal_image)
-        sal_depth = torch.Tensor(sal_depth)
+        
         sal_label = torch.Tensor(sal_label)
         sal_edge = torch.Tensor(sal_edge)
 
-        sample = {'sal_image': sal_image, 'sal_depth': sal_depth, 'sal_label': sal_label, 'sal_edge': sal_edge}
+        sample = {'sal_image': sal_image, 'sal_depth': sal_image, 'sal_label': sal_label, 'sal_edge': sal_edge}
         return sample
 
-    def __len__(self):
-        return self.sal_num
 
 
 class ImageDataTest(data.Dataset):
