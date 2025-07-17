@@ -50,7 +50,7 @@ class Solver(object):
         
         if self.config.cuda:
             self.net = self.net.cuda()
-
+        self.scripted_net = torch.jit.script(self.net)
         self.lr = self.config.lr
         self.wd = self.config.wd
 
