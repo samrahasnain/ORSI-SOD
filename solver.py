@@ -32,47 +32,58 @@ class Solver(object):
         self.config = config
         self.iter_size = config.iter_size
         self.show_every = config.show_every
-        #self.build_model()
+
+        # Build model
         self.net = build_model(self.config.network, self.config.arch)
-        #self.net.eval()
+
+        # Load weights
         if config.mode == 'test':
-            print('Loading pre-trained model for testing from %s...' % self.config.model)
+            print(f'Loading pre-trained model for testing from {self.config.model}...')
             self.net.load_state_dict(torch.load(self.config.model, map_location=torch.device('cpu')))
-        if config.mode == 'train':
+        elif config.mode == 'train':
             if self.config.load == '':
-                print("Loading pre-trained imagenet weights for fine tuning")
+                print("Loading pre-trained ImageNet weights for fine-tuning")
                 self.net.JLModule.load_pretrained_model(self.config.pretrained_model)
-                                                      
-                # load pretrained backbone
             else:
                 print('Loading pretrained model to resume training')
-                self.net.load_state_dict(torch.load(self.config.load))  # load pretrained model
-        
+                self.net.load_state_dict(torch.load(self.config.load))
+
+        # Use GPU if available
         if self.config.cuda:
             self.net = self.net.cuda()
+
         self.scripted_net = torch.jit.script(self.net)
+
+        # Optimizer and LR scheduler
         self.lr = self.config.lr
         self.wd = self.config.wd
-
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=self.lr, weight_decay=self.wd)
 
-        self.print_network(self.net, 'Conformer based SOD Structure')
+        # 🔑 Add ReduceLROnPlateau scheduler
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode='min',
+            factor=0.5,   # reduce LR by half
+            patience=5,   # wait 5 epochs without improvement
+            verbose=True
+        )
 
-    # print the network information and parameter numbers
+        self.print_network(self.net, 'Conformer based RSI-SOD Structure')
+
     def print_network(self, model, name):
         num_params_t = 0
-        num_params=0
+        num_params = 0
         for p in model.parameters():
             if p.requires_grad:
                 num_params_t += p.numel()
             else:
                 num_params += p.numel()
         print(name)
-        #print(model)
-        print("The number of trainable parameters: {}".format(num_params_t))
-        print("The number of parameters: {}".format(num_params))
+        print(f"The number of trainable parameters: {num_params_t}")
+        print(f"The number of parameters: {num_params}")
         print(f'Flops: {count_model_flops(model)}')
         print(f'Parameters: {count_model_params(model)}')
+
 
     def test(self):
         print('Testing...')
@@ -112,54 +123,61 @@ class Solver(object):
     
   
     # training phase
-    def train(self):
+        def train(self):
         iter_num = len(self.train_loader.dataset) // self.config.batch_size
-        
-        loss_vals=  []
-        
+        loss_vals = []
+
         for epoch in range(self.config.epoch):
             r_sal_loss = 0
-            r_sal_loss_item=0
+            r_sal_loss_item = 0
+
             for i, data_batch in enumerate(self.train_loader):
-                sal_image, sal_depth, sal_label, sal_edge = data_batch['sal_image'], data_batch['sal_depth'], data_batch[
-                    'sal_label'], data_batch['sal_edge']
+                sal_image, sal_depth, sal_label, sal_edge = data_batch['sal_image'], data_batch['sal_depth'], data_batch['sal_label'], data_batch['sal_edge']
+
                 if (sal_image.size(2) != sal_label.size(2)) or (sal_image.size(3) != sal_label.size(3)):
                     print('IMAGE ERROR, PASSING```')
                     continue
+
                 if self.config.cuda:
                     device = torch.device(self.config.device_id)
-                    sal_image, sal_depth, sal_label, sal_edge= sal_image.to(device), sal_depth.to(device), sal_label.to(device),sal_edge.to(device)
+                    sal_image, sal_depth, sal_label, sal_edge = sal_image.to(device), sal_depth.to(device), sal_label.to(device), sal_edge.to(device)
 
-               
                 self.optimizer.zero_grad()
+
                 sal_label_coarse = F.interpolate(sal_label, size_coarse, mode='bilinear', align_corners=True)
-                
-                sal_final,coarse_sal_rgb,coarse_sal_depth,sal_edge_rgbd0,sal_edge_rgbd1,sal_edge_rgbd2 = self.net(sal_image,sal_depth)
-                
-                sal_loss_coarse_rgb =  F.binary_cross_entropy_with_logits(coarse_sal_rgb, sal_label_coarse, reduction='sum')
-                sal_loss_coarse_depth =  F.binary_cross_entropy_with_logits(coarse_sal_depth, sal_label_coarse, reduction='sum')
-                sal_final_loss =  F.binary_cross_entropy_with_logits(sal_final, sal_label, reduction='sum')
-                edge_loss_rgbd0=F.smooth_l1_loss(sal_edge_rgbd0,sal_edge)
-                edge_loss_rgbd1=F.smooth_l1_loss(sal_edge_rgbd1,sal_edge)
-                edge_loss_rgbd2=F.smooth_l1_loss(sal_edge_rgbd2,sal_edge)
-                
-                sal_loss_fuse = sal_final_loss+512*edge_loss_rgbd0+1024*edge_loss_rgbd1+2048*edge_loss_rgbd2+sal_loss_coarse_rgb+sal_loss_coarse_depth
-                sal_loss = sal_loss_fuse/ (self.iter_size * self.config.batch_size)
+                sal_final, coarse_sal_rgb, coarse_sal_depth, sal_edge_rgbd0, sal_edge_rgbd1, sal_edge_rgbd2 = self.net(sal_image, sal_depth)
+
+                sal_loss_coarse_rgb = F.binary_cross_entropy_with_logits(coarse_sal_rgb, sal_label_coarse, reduction='sum')
+                sal_loss_coarse_depth = F.binary_cross_entropy_with_logits(coarse_sal_depth, sal_label_coarse, reduction='sum')
+                sal_final_loss = F.binary_cross_entropy_with_logits(sal_final, sal_label, reduction='sum')
+                edge_loss_rgbd0 = F.smooth_l1_loss(sal_edge_rgbd0, sal_edge)
+                edge_loss_rgbd1 = F.smooth_l1_loss(sal_edge_rgbd1, sal_edge)
+                edge_loss_rgbd2 = F.smooth_l1_loss(sal_edge_rgbd2, sal_edge)
+
+                sal_loss_fuse = sal_final_loss + 512 * edge_loss_rgbd0 + 1024 * edge_loss_rgbd1 + 2048 * edge_loss_rgbd2 + sal_loss_coarse_rgb + sal_loss_coarse_depth
+                sal_loss = sal_loss_fuse / (self.iter_size * self.config.batch_size)
                 r_sal_loss += sal_loss.data
-                r_sal_loss_item+=sal_loss.item() * sal_image.size(0)
+                r_sal_loss_item += sal_loss.item() * sal_image.size(0)
+
                 sal_loss.backward()
                 self.optimizer.step()
 
-                
-
-
             if (epoch + 1) % self.config.epoch_save == 0:
                 torch.save(self.net.state_dict(), '%s/epoch_%d.pth' % (self.config.save_folder, epoch + 1))
-            train_loss=r_sal_loss_item/len(self.train_loader.dataset)
+
+            train_loss = r_sal_loss_item / len(self.train_loader.dataset)
             loss_vals.append(train_loss)
-            
-            print('Epoch:[%2d/%2d] | Train Loss : %.3f' % (epoch, self.config.epoch,train_loss))
-            
-        # save model
+
+            print(f'Epoch:[{epoch+1:2d}/{self.config.epoch}] | Train Loss : {train_loss:.6f}')
+
+            # 🔑 Step the scheduler with the train loss
+            self.scheduler.step(train_loss)
+
+            # Optional: show current LR
+            for param_group in self.optimizer.param_groups:
+                print(f"Current LR: {param_group['lr']}")
+
+        # Final save
         torch.save(self.net.state_dict(), '%s/final.pth' % self.config.save_folder)
+
         
