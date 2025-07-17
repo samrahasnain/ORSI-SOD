@@ -43,9 +43,8 @@ class Solver(object):
         if config.mode == 'train':
             if self.config.load == '':
                 print("Loading pre-trained imagenet weights for fine tuning")
-                self.net.JLModule.load_pretrained_model(self.config.pretrained_model
-                                                        if isinstance(self.config.pretrained_model, str)
-                                                        else self.config.pretrained_model[self.config.network])
+                self.net.JLModule.load_pretrained_model(self.config.pretrained_model)
+                                                      
                 # load pretrained backbone
             else:
                 print('Loading pretrained model to resume training')
@@ -356,7 +355,7 @@ class Solver(object):
                 self.optimizer.zero_grad()
                 sal_label_coarse = F.interpolate(sal_label, size_coarse, mode='bilinear', align_corners=True)
                 
-                sal_final,sal_low,sal_med,sal_high,coarse_sal_rgb,coarse_sal_depth,Att,sal_edge_rgbd0,sal_edge_rgbd1,sal_edge_rgbd2 = self.net(sal_image,sal_depth)
+                sal_final,coarse_sal_rgb,coarse_sal_depth,sal_edge_rgbd0,sal_edge_rgbd1,sal_edge_rgbd2 = self.net(sal_image,sal_depth)
                 
                 sal_loss_coarse_rgb =  F.binary_cross_entropy_with_logits(coarse_sal_rgb, sal_label_coarse, reduction='sum')
                 sal_loss_coarse_depth =  F.binary_cross_entropy_with_logits(coarse_sal_depth, sal_label_coarse, reduction='sum')
@@ -385,7 +384,7 @@ class Solver(object):
                     writer.add_scalar('sal_edge training loss', edge_loss_rgbd2.data,
                                       epoch * len(self.train_loader.dataset) + i)
 
-                    r_sal_loss = 0
+                    '''r_sal_loss = 0
                     res = coarse_sal_depth[0].clone()
                     res = res.sigmoid().data.cpu().numpy().squeeze()
                     res = (res - res.min()) / (res.max() - res.min() + 1e-8)
@@ -423,7 +422,7 @@ class Solver(object):
                     sal_edge_rgbd = sal_edge_rgbd.sigmoid().data.cpu().numpy().squeeze()
                     sal_edge_rgbd = (sal_edge_rgbd - sal_edge_rgbd.min()) / (sal_edge_rgbd.max() - sal_edge_rgbd.min() + 1e-8)
                     writer.add_image('sal_edge_rgbd', torch.tensor(sal_edge_rgbd), i, dataformats='HW')
-                    grid_image = make_grid(sal_edge[0].clone().cpu().data, 1, normalize=True)
+                    grid_image = make_grid(sal_edge[0].clone().cpu().data, 1, normalize=True)'''
 
 
             if (epoch + 1) % self.config.epoch_save == 0:
@@ -436,4 +435,3 @@ class Solver(object):
         # save model
         torch.save(self.net.state_dict(), '%s/final.pth' % self.config.save_folder)
         
-
