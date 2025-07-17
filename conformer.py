@@ -2,16 +2,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from functools import partial
-from torchsummary import summary
+#from torchsummary import summary
 from timm.models.layers import DropPath, trunc_normal_
 import os
 import cv2
 import numpy
 import numpy as np
 import time
-from torch.utils.tensorboard import SummaryWriter
-from torchvision.utils import make_grid
-writer = SummaryWriter('log/run' + time.strftime("%d-%m"))
+
 im_size=(320,320)
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
@@ -778,7 +776,7 @@ class JL_DCF(nn.Module):
 
         sal_final,sal_low,sal_med,sal_high,e_rgbd0,e_rgbd1,e_rgbd2=self.decoder(lde_out ,rgb_h,rgb_m,depth_h,depth_m,rgb_l,depth_l)
 
-        return sal_final,sal_low,sal_med,sal_high,coarse_sal_rgb,coarse_sal_depth,Att,e_rgbd0,e_rgbd1,e_rgbd2,rgb_1,rgb_2,rgb_3,rgb_4,rgb_5,depth_1,depth_2,depth_3,depth_4,depth_5,rgbd_fusion_1,rgbd_fusion_2,rgbd_fusion_3,rgbd_fusion_4,rgbd_fusion_5
+        return sal_final,coarse_sal_rgb,coarse_sal_depth,e_rgbd0,e_rgbd1,e_rgbd2
 
 def build_model(network='conformer', base_model_cfg='conformer'):
    
