@@ -109,7 +109,7 @@ class Solver(object):
 
                 frame_time = time.time() - start_time  # Time for one frame
                 print(frame_time)           
-                preds = F.interpolate(preds, tuple(im_size), mode='bilinear', align_corners=True)
+                preds = F.interpolate(preds, size=(384,384), mode='bilinear', align_corners=True)
                 pred = np.squeeze(torch.sigmoid(preds)).cpu().data.numpy()
                 #print(pred.shape)
                 pred = (pred - pred.min()) / (pred.max() - pred.min() + 1e-8)
