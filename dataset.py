@@ -69,9 +69,9 @@ class ImageDataTest(data.Dataset):
 
         return {
             'image': image,
-            'label': label,
             'name': self.image_list[index],
-            'size': im_size
+            'size': im_size,
+            'depth': image
         }
 
 
