@@ -1,4 +1,3 @@
-%%writefile /kaggle/working/ORSI-SOD/solver.py
 import torch
 from torch.nn import functional as F
 from conformer import build_model
