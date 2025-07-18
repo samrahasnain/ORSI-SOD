@@ -1,3 +1,4 @@
+%%writefile /kaggle/working/ORSI-SOD/solver.py
 import torch
 from torch.nn import functional as F
 from conformer import build_model
@@ -52,7 +53,7 @@ class Solver(object):
         if self.config.cuda:
             self.net = self.net.cuda()
 
-        self.scripted_net = torch.jit.script(self.net)
+        #self.scripted_net = torch.jit.script(self.net)
 
         # Optimizer and LR scheduler
         self.lr = self.config.lr
@@ -103,7 +104,7 @@ class Solver(object):
                     torch.cuda.synchronize()
                
                 start_time = time.time()  # Timing starts AFTER synchronization
-                preds,coarse_sal_rgb,coarse_sal_depth,sal_edge_rgbd0,sal_edge_rgbd1,sal_edge_rgbd2= self.scripted_net(images,depth)
+                preds,coarse_sal_rgb,coarse_sal_depth,sal_edge_rgbd0,sal_edge_rgbd1,sal_edge_rgbd2= self.net(images,depth)
                 if self.config.cuda:
                     torch.cuda.synchronize()
 
@@ -123,7 +124,7 @@ class Solver(object):
     
   
     # training phase
-        def train(self):
+    def train(self):
         iter_num = len(self.train_loader.dataset) // self.config.batch_size
         loss_vals = []
 
